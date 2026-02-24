@@ -8,6 +8,7 @@ const emailService = require("../services/email.service")
 
 
 async function createTransaction (req, res) {
+    // validate request
     const { fromAccount, toAccount, amount, idempotencyKey } = req.body
 
     if(!fromAccount || !toAccount || !amount || !idempotencyKey) {
@@ -30,7 +31,7 @@ async function createTransaction (req, res) {
         })
     }
 
-
+    // validate idempotency
     const isTransactionAlreadyExists = await transactionModel.findOne({
         idempotencyKey : idempotencyKey
     })
@@ -52,6 +53,26 @@ async function createTransaction (req, res) {
                 message : "transaction failed"
             })
         }
-        if()
+        if(isTransactionAlreadyExists.status === "REVERSED") {
+            return res.status(200).json({
+                message : "transaction reversed"
+            })
+        }
+    }
+
+    // check account stutas
+    if(fromUserAccount !== "ACTIVE" || toUserAccount !== "ACTIVE") {
+        return res.status(400).json({
+            message : "both account must be active"
+        })
+    }
+
+    // derive sender balance from ledger
+    const balance = await fromUserAccount.getBalance()
+
+    if(balance < amount) {
+        return res.status(400).json({
+            message : `insufficient balance in fromAccount. current balance is ${balance}. requested amount is ${amount}`
+        })
     }
 }
