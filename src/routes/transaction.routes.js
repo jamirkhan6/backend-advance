@@ -7,8 +7,11 @@ const transactionRouter = Router()
 
 
 
-
+//create new transaction
 transactionRouter.post("/", authMiddleware.authMiddleware, transactionController.createTransaction)
+
+//system initial funds
+transactionRouter.post("/system/initial-funds", authMiddleware.authSystemUserMiddleware, transactionController.createInitialFundsTransaction)
 
 
 
