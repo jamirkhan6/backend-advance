@@ -71,7 +71,7 @@ async function createTransaction (req, res) {
 
     const parsedAmount = Number(amount);
 
-    if (isNaN(parsedAmount) || parsedAmount <= 0) {
+    if (balance < parsedAmount || parsedAmount <= 0) {
       return res.status(400).json({
         message : `insufficient balance in fromAccount. current balance is ${balance}. requested amount is ${amount}`
       });
@@ -79,18 +79,18 @@ async function createTransaction (req, res) {
 
     // create transaction
     let transaction;
-    console.log("transaction : "+ transaction)
+    console.log("console 1 : "+ transaction)
     try{
         const session = await mongoose.startSession()
         session.startTransaction()
         
-        [transaction] = await transactionModel.create([ {
+        transaction = (await transactionModel.create([ {
             fromAccount,
             toAccount,
             amount,
             idempotencyKey,
             status: "PENDING"
-        } ], { session })
+        } ], { session }))[0]
         
         const debitLedgerEntry = await ledgerModel.create([ {
             account : fromAccount,
@@ -100,7 +100,7 @@ async function createTransaction (req, res) {
         } ], {session})
         
         await (() => {
-            return new Promise((resolve) => setTimeout(resolve, 4 * 1000))
+            return new Promise((resolve) => setTimeout(resolve, 15 * 1000) )
         })()
         
         const creditLedgerEntry = await ledgerModel.create([ {
@@ -118,10 +118,11 @@ async function createTransaction (req, res) {
         
         await session.commitTransaction()
         session.endSession()
+        console.log("console 2 : " + transaction);
     }
     catch(error){
-        
-        return res.status(500).json({
+        console.log("console 3 : " + transaction);
+        return res.status(400).json({
             message : "transaction due to internal error, please retry after sometime",
             error : error
         })
