@@ -14,7 +14,6 @@ async function createTransaction (req, res) {
         return res.status(400).json({
             message : "from account, to account, amount, idempotency key are required"
         })
-        
     }
 
     const fromUserAccount = await accountModel.findOne({
@@ -43,7 +42,7 @@ async function createTransaction (req, res) {
                 transaction : isTransactionAlreadyExists
             })
         }
-        if(isTransactionAlreadyExists.status === "PANDING"){
+        if(isTransactionAlreadyExists.status === "PENDING"){
             return res.status(200).json({
                 message : "transaction is pending"
             })
@@ -61,7 +60,7 @@ async function createTransaction (req, res) {
     }
 
     // check account stutas
-    if(fromUserAccount !== "ACTIVE" || toUserAccount !== "ACTIVE") {
+    if(fromUserAccount.status !== "ACTIVE" || toUserAccount.status !== "ACTIVE") {
         return res.status(400).json({
             message : "both account must be active"
         })
@@ -70,45 +69,64 @@ async function createTransaction (req, res) {
     // derive sender balance from ledger
     const balance = await fromUserAccount.getBalance()
 
-    if(balance < amount) {
-        return res.status(400).json({
-            message : `insufficient balance in fromAccount. current balance is ${balance}. requested amount is ${amount}`
-        })
+    const parsedAmount = Number(amount);
+
+    if (isNaN(parsedAmount) || parsedAmount <= 0) {
+      return res.status(400).json({
+        message : `insufficient balance in fromAccount. current balance is ${balance}. requested amount is ${amount}`
+      });
     }
 
     // create transaction
-    const session = await mongoose.startSession()
-    session.startTransaction()
-
-    const transaction = await transactionModel({
-        fromAccount,
-        toAccount,
-        amount,
-        idempotencyKey,
-        status: "PENDING"
-    }, {session})
-
-    const debitLedgerEntry = await ledgerModel.create([ {
-        account : fromAccount,
-        amount : amount,
-        transaction : transaction._id,
-        type : "DEBIT"
-    } ], {session})
-
-    const creditLedgerEntry = await ledgerModel.create([ {
-        account : toAccount,
-        amount : amount,
-        transaction : transaction._id,
-        type : "CREDIT",
-    } ], {session})
-
-    transaction.status = "COMPLETED"
-    await transaction.save({session})
-
-
-    await session.commitTransaction()
-    session.endSession()
-
+    let transaction;
+    console.log("transaction : "+ transaction)
+    try{
+        const session = await mongoose.startSession()
+        session.startTransaction()
+        
+        [transaction] = await transactionModel.create([ {
+            fromAccount,
+            toAccount,
+            amount,
+            idempotencyKey,
+            status: "PENDING"
+        } ], { session })
+        
+        const debitLedgerEntry = await ledgerModel.create([ {
+            account : fromAccount,
+            amount : amount,
+            transaction : transaction._id,
+            type : "DEBIT"
+        } ], {session})
+        
+        await (() => {
+            return new Promise((resolve) => setTimeout(resolve, 4 * 1000))
+        })()
+        
+        const creditLedgerEntry = await ledgerModel.create([ {
+            account : toAccount,
+            amount : amount,
+            transaction : transaction._id,
+            type : "CREDIT",
+        } ], {session})
+        
+        await transactionModel.findOneAndUpdate(
+            { _id : transaction._id },
+            { status : "COMPLETED" },
+            { session }
+        )
+        
+        await session.commitTransaction()
+        session.endSession()
+    }
+    catch(error){
+        
+        return res.status(500).json({
+            message : "transaction due to internal error, please retry after sometime",
+            error : error
+        })
+    }
+        
     // send email notification
     await emailService.sendTransactionEmail(req.user.email, req.user.name, amount, toAccount)
 

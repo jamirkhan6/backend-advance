@@ -27,16 +27,20 @@ async function getUserAccountController(req, res) {
 async function getAccountBalanceController(req, res) {
     const { accountId } = req.params
 
-    const account = await accountModel.findOne({ 
-        _id : accountId._id,
+    const account = await accountModel.findById({ 
+        _id : accountId,
         user : req.user._id
     })
+    
+    console.log("DB account:", account);
 
     if(!account) {
         return res.status(404).json({
             message : "balance checker account not found"
+            
         })
     }
+    
 
     const balance = await account.getBalance();
 

@@ -60,7 +60,7 @@ accountSchema.methods.getBalance = async function() {
     {
       $project : {
         _id : 0,
-        balance : { $subtract : [ "$totalCredit", "totalDebit"]}
+        balance : { $subtract : [ "$totalCredit", "$totalDebit"]}
       }
     }
   ])
@@ -68,7 +68,7 @@ accountSchema.methods.getBalance = async function() {
   if(balanceData.length === 0) {
     return 0
   }
-  return balaceData[0].balance
+  return balanceData[0].balance
 }
 
 
